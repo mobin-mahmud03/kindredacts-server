@@ -1,16 +1,18 @@
-const dns = require('dns');
-dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 const { MongoClient, ServerApiVersion } = require('mongodb');
 require('dotenv').config();
 
-const uri = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017";
-const dbName = process.env.DB_NAME || "kindredacts_db";
+const uri = process.env.MONGODB_URI;
+const dbName = process.env.DB_NAME || 'kindredacts_db';
 
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Prevent multiple MongoDB connections in serverless environments
 let client = null;
+let clientPromise = null;
 let db = null;
 
-// In-memory fallback collection storage for local dev when external MongoDB is not reachable
+// In-memory fallback for local development
 const inMemoryStore = {
   users: [],
   events: [],
@@ -18,26 +20,65 @@ const inMemoryStore = {
 };
 
 async function connectDB() {
-  if (db) return db;
+  if (db) {
+    return db;
+  }
+
+  if (!uri) {
+    const error = new Error('MONGODB_URI is not configured');
+
+    if (isProduction) {
+      throw error;
+    }
+
+    console.warn('[MongoDB] URI missing. Using local memory storage.');
+    return null;
+  }
 
   try {
-    client = new MongoClient(uri, {
-      serverApi: {
-        version: ServerApiVersion.v1,
-        strict: true,
-        deprecationErrors: true,
-      },
-      connectTimeoutMS: 5000,
-      serverSelectionTimeoutMS: 5000,
-    });
+    if (!clientPromise) {
+      client = new MongoClient(uri, {
+        serverApi: {
+          version: ServerApiVersion.v1,
+          strict: true,
+          deprecationErrors: true
+        },
+        connectTimeoutMS: 10000,
+        serverSelectionTimeoutMS: 10000,
+        maxPoolSize: 10
+      });
 
-    await client.connect();
+      clientPromise = client.connect().catch((error) => {
+        client = null;
+        clientPromise = null;
+        throw error;
+      });
+    }
+
+    await clientPromise;
+
     db = client.db(dbName);
-    console.log(`[MongoDB] Connected successfully to database: ${dbName}`);
+
+    console.log(
+      `[MongoDB] Connected successfully: ${dbName}`
+    );
+
     return db;
+
   } catch (error) {
-    console.warn(`[MongoDB Warning] Could not connect to remote MongoDB: ${error.message}`);
-    console.info("[MongoDB Fallback] Operating with resilient local memory store for smooth development and testing.");
+    console.error(
+      '[MongoDB Connection Error]',
+      error.message
+    );
+
+    if (isProduction) {
+      throw error;
+    }
+
+    console.warn(
+      '[MongoDB] Using in-memory fallback for development.'
+    );
+
     return null;
   }
 }
@@ -53,5 +94,5 @@ function getFallbackStore() {
 module.exports = {
   connectDB,
   getDB,
-  getFallbackStore,
+  getFallbackStore
 };
