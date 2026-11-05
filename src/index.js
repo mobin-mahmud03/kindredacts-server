@@ -10,14 +10,14 @@ const eventRoutes = require('./routes/eventRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+
 app.use(cors({
-  origin: true, // Allow frontend origin
+  origin: true, 
   credentials: true
 }));
 app.use(express.json());
 
-// Health & Info Endpoint
+
 app.get('/', (req, res) => {
   res.status(200).json({
     status: 'online',
@@ -34,11 +34,11 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date() });
 });
 
-// Routes
+
 app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 
-// Global Error Handler
+
 app.use((err, req, res, next) => {
   console.error('[Server Error]', err.stack);
   res.status(err.status || 500).json({
@@ -47,7 +47,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Initialize Database & Start Server
+
 async function startServer() {
   await connectDB();
   await seedData();
@@ -63,3 +63,4 @@ async function startServer() {
 startServer();
 
 module.exports = app;
+export default app;
